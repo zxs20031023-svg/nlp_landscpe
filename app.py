@@ -1,8 +1,6 @@
 import streamlit as st
 import os
 import json
-import datetime
-import pandas as pd
 from pydantic import BaseModel, Field
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import PromptTemplate
@@ -16,234 +14,317 @@ from langchain_community.document_loaders import TextLoader, PyPDFLoader, Docx2t
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 # ==========================================
-# 1. 路径与数据结构定义
+# 1. 定义数据结构 (Pydantic) 
 # ==========================================
-DATA_DIR = "./data"
-DB_PATH = "./chroma_db"
-MAPPING_JSON_PATH = os.path.join(DATA_DIR, "sense_mapping.json")
-KB_TXT_PATH = os.path.join(DATA_DIR, "规范知识库_总表.txt")
-OUTPUT_DIR = "./output_briefs"
-
+# 1.1 数字化任务书输出结构 (原功能)
 class LandscapeBrief(BaseModel):
-    project_type: str = Field(description="项目类型")
-    style_preference: str = Field(description="景观风格")
-    parameters: dict = Field(description="物理参数键值对，如 {'郁闭度': 0.8}")
+    project_type: str = Field(description="项目类型，如城市公园、社区口袋公园等")
+    style_preference: str = Field(description="景观风格，如现代自然、新中式等")
+    canopy_closure: float = Field(description="植物郁闭度 (0.0-1.0)")
+    path_slope_max_percentage: float = Field(description="最大园路坡度 (%)")
+    hardscape_ratio: float = Field(description="硬质铺装比例 (0.0-1.0)")
     functional_zones: list[str] = Field(description="功能分区列表")
-    regulations_kv: dict = Field(description="应用的规范简要键值对")
-    citation_excerpts: list[str] = Field(description="对应的国家规范原始条文摘录")
-    warnings: list[str] = Field(description="修正说明或合规警告")
+    warnings: list[str] = Field(description="【核心】规范冲突与修正警告说明。如果没有冲突则为空列表。")
+
+# 1.2 场地多维解析输出结构 (新增功能)
+class SiteAnalysis(BaseModel):
+    location_context: str = Field(description="区位与周边环境特征总结")
+    climate_environment: str = Field(description="气候条件与微环境特征总结")
+    topography_features: str = Field(description="地形地貌与水文特征总结")
+    opportunities: list[str] = Field(description="场地具备的开发优势与机遇 (Opportunities)")
+    constraints: list[str] = Field(description="场地面临的限制因素与挑战 (Constraints)")
+    design_suggestions: list[str] = Field(description="基于场地的专业初步设计建议")
 
 # ==========================================
-# 2. 核心工具函数
+# 2. 模拟本地知识库 (字典/JSON)
+# ==========================================
+SENSE_MAPPING = {
+    "幽静": "郁闭度应大于0.7，硬质铺装比例小于0.2，以自然绿化为主。",
+    "开阔": "郁闭度应小于0.3，强调视线通廊，硬质铺装可适当增加。",
+    "活力": "需包含集散广场、运动健身区等功能，铺装比例不低于0.4。",
+    "适老": "需包含康体健身区、静态休憩区，需重点关注无障碍通行、防滑处理。",
+    "生态": "绿地率需大于70%，优先使用乡土树种，水体驳岸采用软质生态驳岸。",
+    "现代": "硬质铺装以简洁的几何线条为主，植物配置强调阵列感或大色块对比。"
+}
+
+# ==========================================
+# 3. 核心处理流程引擎
 # ==========================================
 
-def load_mapping_kv():
-    if not os.path.exists(DATA_DIR): os.makedirs(DATA_DIR)
-    if os.path.exists(MAPPING_JSON_PATH):
-        with open(MAPPING_JSON_PATH, "r", encoding="utf-8") as f: return json.load(f)
-    else:
-        default = {"幽静": "郁闭度 > 0.7", "开阔": "郁闭度 < 0.3", "适老": "坡度 < 2.5%", "生态": "绿地率 > 70%"}
-        with open(MAPPING_JSON_PATH, "w", encoding="utf-8") as f: json.dump(default, f, ensure_ascii=False)
-        return default
-
-def get_embeddings(api_key, base_url):
-    """
-    Embedding 专用: 大部分国产模型 Embedding 接口和 Chat 接口 Base URL 一致
-    但注意：如果用通义千问，Embedding 路径也是兼容模式
-    """
-    return OpenAIEmbeddings(
-        api_key=api_key, 
-        base_url=base_url if base_url else None,
-        model="text-embedding-v3", 
-        chunk_size=10, 
-        check_embedding_ctx_length=False
+# 3.1 大模型转译链 + RAG检索引擎 (原功能)
+def generate_digital_brief(api_key, base_url, model_name, user_input):
+    llm = ChatOpenAI(api_key=api_key, base_url=base_url if base_url else None, model=model_name, temperature=0)
+    embeddings = OpenAIEmbeddings(
+        api_key=api_key, base_url=base_url if base_url else None,
+        model="text-embedding-v3", chunk_size=10, check_embedding_ctx_length=False 
     )
 
-def process_file_and_sync_txt(uploaded_file, api_key, base_url):
-    if not os.path.exists(DATA_DIR): os.makedirs(DATA_DIR)
-    fpath = os.path.join(DATA_DIR, uploaded_file.name)
-    with open(fpath, "wb") as f: f.write(uploaded_file.getbuffer())
-    
-    if fpath.lower().endswith(".pdf"): loader = PyPDFLoader(fpath)
-    elif fpath.lower().endswith((".docx", ".doc")): loader = Docx2txtLoader(fpath)
-    else: loader = TextLoader(fpath, encoding="utf-8")
-    
-    docs = loader.load()
-    full_text = "\n".join([d.page_content for d in docs])
-    
-    with open(KB_TXT_PATH, "a", encoding="utf-8") as f:
-        f.write(f"\n\n{'='*30}\n【来源文件】: {uploaded_file.name}\n【同步日期】: {datetime.datetime.now()}\n{'='*30}\n")
-        f.write(full_text)
-    
-    splitter = RecursiveCharacterTextSplitter(chunk_size=400, chunk_overlap=50)
-    splits = splitter.split_documents(docs)
-    Chroma.from_documents(documents=splits, embedding=get_embeddings(api_key, base_url), persist_directory=DB_PATH)
-    return len(splits)
+    db_path = "./chroma_db"
+    if not os.path.exists(db_path):
+        raise Exception("未找到向量数据库！请先在左侧边栏上传规范文件，系统会自动构建。")
+        
+    vectorstore = Chroma(persist_directory=db_path, embedding_function=embeddings)
+    retriever = vectorstore.as_retriever(search_kwargs={"k": 2})
+    relevant_docs = retriever.invoke(user_input)
+    retrieved_regulations = "\n".join([doc.page_content for doc in relevant_docs])
 
-def save_digital_report_with_citations(data):
-    if not os.path.exists(OUTPUT_DIR): os.makedirs(OUTPUT_DIR)
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    fname = f"数字化任务书_{data.get('project_type')}_{timestamp}.txt"
-    fpath = os.path.join(OUTPUT_DIR, fname)
+    parser = JsonOutputParser(pydantic_object=LandscapeBrief)
+    prompt = PromptTemplate(
+        template="""你是一个资深的风景园林架构师与合规审查专家。
+请根据以下【用户输入的设计需求】，结合【本地经验映射库】和【强制性国家规范】，生成一份参数化的景观设计任务书。
+
+【用户输入的设计需求】\n{user_input}\n
+【本地经验映射库参考】\n{sense_mapping}\n
+【检索到的国家规范 (强制约束)】\n{regulations}\n
+
+【处理逻辑与要求】
+1. 语义提取：理解用户的感性需求，参考映射库转化为初步物理参数。
+2. 合规校验（关键）：将初步参数与【检索到的国家规范】进行比对。
+3. 自动修正：如果用户需求或初步参数违反了国家规范（例如坡度超标、植物违规），你必须强制修正为合规参数，并在 warnings 中详细记录“因什么规范，将什么参数或设施修改为了什么”。
+
+请严格按照以下 JSON 格式输出：\n{format_instructions}
+""",
+        input_variables=["user_input", "sense_mapping", "regulations"],
+        partial_variables={"format_instructions": parser.get_format_instructions()},
+    )
+
+    chain = prompt | llm | parser
+    mapping_str = json.dumps(SENSE_MAPPING, ensure_ascii=False, indent=2)
+
+    with get_openai_callback() as cb:
+        result = chain.invoke({
+            "user_input": user_input,
+            "sense_mapping": mapping_str,
+            "regulations": retrieved_regulations if retrieved_regulations else "未检索到相关规范。"
+        })
+    return result, cb
+
+# 3.2 场地多维智能解析引擎 (新增功能)
+def generate_site_analysis(api_key, base_url, model_name, site_info):
+    llm = ChatOpenAI(api_key=api_key, base_url=base_url if base_url else None, model=model_name, temperature=0.3)
     
-    lines = [
-        "==========================================",
-        "      景观设计数字化任务书 (Digital Brief)",
-        f"      生成时间: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-        "==========================================\n",
-        f"【项目基本定位】\n- 项目类型: {data.get('project_type')}\n- 风格倾向: {data.get('style_preference')}\n",
-        "【设计参数键值对 (Parameters KV)】"
-    ]
-    for k, v in data.get('parameters', {}).items(): lines.append(f" - {k}: {v}")
-    lines.append("\n【合规审查建议】")
-    for w in data.get('warnings', []): lines.append(f" ! {w}")
-    if not data.get('warnings'): lines.append(" ✅ 意图符合规范要求。")
-    
-    lines.append("\n" + "-"*30 + "\n【附录：对应规范原文摘录】")
-    for i, excerpt in enumerate(data.get('citation_excerpts', [])):
-        lines.append(f"[{i+1}] {excerpt.strip()}")
-    
-    full_content = "\n".join(lines)
-    with open(fpath, "w", encoding="utf-8") as f: f.write(full_content)
-    return fpath, full_content
+    parser = JsonOutputParser(pydantic_object=SiteAnalysis)
+    prompt = PromptTemplate(
+        template="""你是一个专业的风景园林师与场地规划专家。
+请根据以下【场地勘察原始资料/描述】，进行深度挖掘与多维度解析，输出结构化的场地分析报告。
+
+【场地资料】
+{site_info}
+
+【解析要求】
+1. 提炼区位环境、气候、地形地貌与水文特征。
+2. 深度剖析场地具备的优势与机遇（Opportunities），以及限制条件与挑战（Constraints）。
+3. 基于这些特征，给出具有实操性的专业景观设计建议。
+
+请严格按照以下 JSON 格式输出：\n{format_instructions}
+""",
+        input_variables=["site_info"],
+        partial_variables={"format_instructions": parser.get_format_instructions()},
+    )
+
+    chain = prompt | llm | parser
+
+    with get_openai_callback() as cb:
+        result = chain.invoke({"site_info": site_info})
+    return result, cb
 
 # ==========================================
-# 3. Streamlit UI 界面
+# 4. Streamlit 前端界面设计
 # ==========================================
-st.set_page_config(page_title="景观需求转译全机型系统", layout="wide", page_icon="🌿")
+st.set_page_config(page_title="景观 NLP 转译系统", page_icon="🌿", layout="wide")
 
-if 'mapping_kv' not in st.session_state: st.session_state.mapping_kv = load_mapping_kv()
+st.title("🌿 基于NLP的城市公园景观设计需求转译与场地解析系统")
 
-st.title("🌿 景观需求转译与规范同步系统 (全模型支持)")
+# 初始化 Session State
+if 'total_tokens' not in st.session_state: st.session_state.total_tokens = 0
+if 'prompt_tokens' not in st.session_state: st.session_state.prompt_tokens = 0
+if 'completion_tokens' not in st.session_state: st.session_state.completion_tokens = 0
+if 'last_uploaded_file' not in st.session_state: st.session_state.last_uploaded_file = None
 
 # --- 侧边栏 ---
 with st.sidebar:
-    st.header("🤖 模型引擎配置")
+    st.header("⚙️ 系统配置")
+    api_key = st.text_input("API Key (阿里云百炼)", type="password", placeholder="sk-...")
+    base_url = st.text_input("Base URL", value="https://dashscope.aliyuncs.com/compatible-mode/v1")
     
-    # 【已修正】各个主流厂商的标准 Base URL
-    PROVIDERS = {
-        "DeepSeek (深度求索)": {"url": "https://api.deepseek.com/v1", "models": ["deepseek-chat", "deepseek-coder"]},
-        "阿里云百炼 (通义千问)": {"url": "https://dashscope.aliyuncs.com/compatible-mode/v1", "models": ["qwen-plus", "qwen-max", "qwen-turbo", "qwen-long"]},
-        "OpenAI (ChatGPT)": {"url": "https://api.openai.com/v1", "models": ["gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"]},
-        "月之暗面 (Kimi)": {"url": "https://api.moonshot.cn/v1", "models": ["moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"]},
-        "智谱AI (ChatGLM)": {"url": "https://open.bigmodel.cn/api/paas/v4/", "models": ["glm-4", "glm-4-flash", "glm-3-turbo"]},
-        "零一万物 (Yi)": {"url": "https://api.lingyiwanwu.com/v1", "models": ["yi-large", "yi-medium", "yi-spark"]},
-        "Ollama (本地私有)": {"url": "http://localhost:11434/v1", "models": ["llama3", "qwen2", "mistral"]},
-        "自定义 (兼容OpenAI)": {"url": "", "models": []}
-    }
-
-    provider_name = st.selectbox("选择模型供应商", list(PROVIDERS.keys()))
-    provider_cfg = PROVIDERS[provider_name]
-    
-    api_key = st.text_input("API Key", type="password", placeholder="填入对应平台的 API Key")
-    
-    # 动态 URL 控制
-    base_url = st.text_input("Base URL (检查末尾是否带/v1)", value=provider_cfg["url"])
-    
-    # 动态模型选择
-    if provider_cfg["models"]:
-        model_name = st.selectbox("选择模型版本", provider_cfg["models"])
+    PREDEFINED_MODELS = [
+        "qwen-plus", "qwen-max", "qwen-turbo", "qwen-long",
+        "deepseek-chat", "deepseek-coder",
+        "gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo",
+        "moonshot-v1-8k", "moonshot-v1-32k",
+        "glm-4", "glm-3-turbo",
+        "yi-large", "yi-medium",
+        "自定义输入..."
+    ]
+    selected_model = st.selectbox("选择模型", PREDEFINED_MODELS)
+    if selected_model == "自定义输入...":
+        model_name = st.text_input("请输入自定义模型名称", value="qwen-plus")
     else:
-        model_name = st.text_input("手动输入模型名称", value="gpt-4o")
-
+        model_name = selected_model
+        
     st.markdown("---")
-    st.header("📑 1. 语义映射管理")
-    with st.expander("管理感性词映射"):
-        for k, v in st.session_state.mapping_kv.items():
-            st.session_state.mapping_kv[k] = st.text_input(f"{k}:", value=v, key=f"map_{k}")
-        if st.button("💾 保存映射修改"): 
-            with open(MAPPING_JSON_PATH, "w", encoding="utf-8") as f:
-                json.dump(st.session_state.mapping_kv, f, ensure_ascii=False, indent=4)
-            st.toast("映射库已更新")
-
-    st.divider()
-    st.header("📚 2. 规范同步管理")
-    up_file = st.file_uploader("上传规范 (PDF/Word/TXT)", type=["pdf", "docx", "txt"])
-    if up_file and api_key:
-        if st.button("🛠️ 学习新规范并同步"):
-            with st.spinner("解析并构建向量库中..."):
-                num = process_file_and_sync_txt(up_file, api_key, base_url)
-                st.success(f"同步成功！新增 {num} 片段。")
     
-    if os.path.exists(KB_TXT_PATH):
-        if st.button("📖 预览本地文本总库"):
-            with open(KB_TXT_PATH, "r", encoding="utf-8") as f:
-                st.text_area("本地文本总库预览", f.read(), height=250)
-
-# --- 主界面 ---
-col_left, col_right = st.columns(2)
-
-with col_left:
-    st.subheader("1. 景观意图输入")
-    user_desc = st.text_area("描述您的需求:", placeholder="在此输入设计意图...", height=300)
+    st.header("📊 Token 消耗监控")
+    st.metric(label="累计消耗总 Token", value=f"{st.session_state.total_tokens:,}")
+    col_t1, col_t2 = st.columns(2)
+    with col_t1: st.metric(label="提示词", value=f"{st.session_state.prompt_tokens:,}")
+    with col_t2: st.metric(label="生成词", value=f"{st.session_state.completion_tokens:,}")
     
-    if st.button("🚀 执行数字化转译", use_container_width=True, type="primary"):
-        if not api_key: 
-            st.error("请先在左侧输入 API Key")
-        elif not base_url:
-            st.error("Base URL 不能为空")
+    st.markdown("---")
+    st.markdown("### 📚 挂载知识库状态 (规范RAG)")
+
+    uploaded_file = st.file_uploader("📂 上传设计规范文件 (支持 TXT / PDF / Word)", type=["txt", "pdf", "docx", "doc"])
+    
+    if uploaded_file is not None and st.session_state.last_uploaded_file != uploaded_file.name:
+        if not api_key:
+            st.warning("⚠️ 检测到新文件上传，但尚未填写 API Key。")
         else:
-            with st.spinner(f"正在通过 {provider_name} 进行转译..."):
+            with st.spinner(f"🚀 自动构建高维向量知识库..."):
                 try:
-                    # 检索逻辑
-                    context_snippets = []
-                    if os.path.exists(DB_PATH):
-                        vs = Chroma(persist_directory=DB_PATH, embedding_function=get_embeddings(api_key, base_url))
-                        docs = vs.as_retriever(search_kwargs={"k":4}).invoke(user_desc)
-                        context_snippets = [d.page_content for d in docs]
-                    
-                    # LLM 转译引擎
-                    llm = ChatOpenAI(
-                        api_key=api_key, 
-                        base_url=base_url.strip(), 
-                        model=model_name, 
-                        temperature=0
-                    )
-                    
-                    parser = JsonOutputParser(pydantic_object=LandscapeBrief)
-                    prompt = PromptTemplate(
-                        template="""你是一位景观合规专家与任务书架构师。
-                        【需求】: {u}
-                        【语义库】: {m}
-                        【规范条文】: {r}
-                        要求：
-                        1. 转译为 parameters KV。
-                        2. 审查是否冲突。
-                        3. 从【规范条文】中摘录核心原句存入 citation_excerpts。
-                        4. 修正冲突并在 warnings 记录。
-                        格式: {f}""",
-                        input_variables=["u", "m", "r"],
-                        partial_variables={"f": parser.get_format_instructions()}
-                    )
-                    
-                    res = (prompt | llm | parser).invoke({
-                        "u": user_desc,
-                        "m": json.dumps(st.session_state.mapping_kv, ensure_ascii=False),
-                        "r": "\n".join(context_snippets) if context_snippets else "库中暂无相关条文"
-                    })
-                    
-                    fpath, fcontent = save_digital_report_with_citations(res)
-                    st.session_state.final_res = (res, fcontent, fpath)
-                except Exception as e:
-                    st.error(f"⚠️ 转译失败！\n\n**错误代码**: {str(e)}")
-                    if "404" in str(e):
-                        st.info("💡 **排查建议**: 检测到 404 错误。这通常是 Base URL 路径不对。对于 DeepSeek 请确保地址以 `/v1` 结尾。")
+                    os.makedirs("./data", exist_ok=True)
+                    file_path = os.path.join("./data", uploaded_file.name)
+                    with open(file_path, "wb") as f: f.write(uploaded_file.getbuffer())
 
-with col_right:
-    st.subheader("2. 数字化任务书预览")
-    if 'final_res' in st.session_state:
-        res, txt, path = st.session_state.final_res
-        st.markdown("#### 核心参数 KV")
-        st.json(res.get('parameters'))
-        
-        if res.get('warnings'):
-            for w in res['warnings']: st.warning(f"修正建议: {w}")
+                    embeddings = OpenAIEmbeddings(
+                        api_key=api_key, base_url=base_url if base_url else None, 
+                        model="text-embedding-v3", chunk_size=10, check_embedding_ctx_length=False 
+                    )
+                    
+                    if file_path.lower().endswith(".pdf"): loader = PyPDFLoader(file_path)
+                    elif file_path.lower().endswith((".docx", ".doc")): loader = Docx2txtLoader(file_path)
+                    else: loader = TextLoader(file_path, encoding="utf-8")
+
+                    docs = loader.load()
+                    splits = RecursiveCharacterTextSplitter(chunk_size=150, chunk_overlap=30).split_documents(docs)
+                    
+                    if not splits: st.error("❌ 文件解析为空！")
+                    else:
+                        Chroma.from_documents(documents=splits, embedding=embeddings, persist_directory="./chroma_db")
+                        st.session_state.last_uploaded_file = uploaded_file.name
+                        st.success(f"✅ 构建成功！生成 {len(splits)} 个片段。")
+                except Exception as e:
+                    st.error(f"构建失败: {str(e)}")
+
+    if os.path.exists("./chroma_db"): st.success("✅ 向量规范库 (ChromaDB) 已就绪")
+    else: st.warning("⚠️ 向量库未就绪")
+    
+    with st.expander("查看当前本地语义映射库 (Sense Mapping)"):
+        st.json(SENSE_MAPPING)
+
+# --- 主界面：采用 Tabs 结构进行功能解耦 ---
+tab1, tab2 = st.tabs(["🌳 设计需求与规范转译 (核心机制)", "🗺️ 场地现状多维解析 (新增功能)"])
+
+# ================= TAB 1: 需求转译 =================
+with tab1:
+    st.markdown("将**感性自然语言描述**，智能转译为**带规范约束的参数化任务书 (JSON)**")
+    col1, col2 = st.columns([1, 1])
+    
+    with col1:
+        st.subheader("1. 输入设计需求")
+        default_prompt = "设计一个社区口袋公园，里面要有一个儿童游戏场，为了美观，场地周围种一些夹竹桃。另外需要一段给老人用的轮椅小道，为了好玩坡度做到 10%。"
+        user_input = st.text_area("自然语言描述：", value=default_prompt, height=200, key="req_input")
+        submit_btn = st.button("🚀 执行语义解析与参数转译", use_container_width=True, type="primary")
+
+    with col2:
+        st.subheader("2. 数字化任务书 (Digital Brief)")
+        if submit_btn:
+            if not api_key: st.error("请先在左侧边栏填写 API Key！")
+            elif not user_input.strip(): st.warning("请输入设计需求！")
+            else:
+                with st.spinner(f"系统正在进行意图提取与规范校验中..."):
+                    try:
+                        final_json, cb = generate_digital_brief(api_key, base_url, model_name, user_input)
+                        
+                        st.session_state.total_tokens += cb.total_tokens
+                        st.session_state.prompt_tokens += cb.prompt_tokens
+                        st.session_state.completion_tokens += cb.completion_tokens
+                        
+                        if final_json.get('warnings') and len(final_json['warnings']) > 0:
+                            st.warning("⚠️ 检测到规范冲突，已自动修正：")
+                            for w in final_json['warnings']: st.write(f"- {w}")
+                        else:
+                            st.success("✅ 规范校验通过，未发现冲突。")
+                        
+                        st.json(final_json)
+                        
+                        json_string = json.dumps(final_json, ensure_ascii=False, indent=2)
+                        st.download_button(
+                            label="💾 导出数字化任务书 (.json)",
+                            file_name="digital_landscape_brief.json",
+                            mime="application/json",
+                            data=json_string,
+                            type="secondary",
+                            use_container_width=True
+                        )
+                    except Exception as e:
+                        st.error(f"处理失败: {str(e)}")
         else:
-            st.success("✅ 符合国家强制性规范。")
+            st.info("等待输入需求并执行...")
+
+# ================= TAB 2: 场地解析 =================
+with tab2:
+    st.markdown("上传场地勘察报告文件，或输入文字描述，系统将深度挖掘并输出多维度的场地分析与设计建议。")
+    col3, col4 = st.columns([1, 1])
+
+    with col3:
+        st.subheader("1. 提供场地原始信息")
+        site_file = st.file_uploader("📂 上传场地勘察报告 (支持 TXT / PDF / Word)", type=["txt", "pdf", "docx", "doc"], key="site_file")
+        st.markdown("**或直接输入场地描述：**")
+        default_site = "场地位于深圳市南山区某老旧社区内，面积约2000平米，三面被高层住宅环绕，日照时间较短。场地内部高差显著，最大高差约3米，目前杂草丛生，有一处常年积水的洼地。社区内老年人口占比较高，缺乏活动空间。"
+        site_text = st.text_area("场地描述：", value=default_site, height=150, key="site_text")
         
-        with st.expander("🔍 查看引用规范原文"):
-            for i, cite in enumerate(res.get('citation_excerpts', [])):
-                st.caption(f"[{i+1}] {cite}")
-        
-        st.text_area("数字化报告预览:", txt, height=300)
-        st.download_button("💾 下载报告", txt, file_name=os.path.basename(path))
+        site_analyze_btn = st.button("🗺️ 开始场地多维解析", use_container_width=True, type="primary", key="site_btn")
+
+    with col4:
+        st.subheader("2. 智能多维场地分析报告")
+        if site_analyze_btn:
+            if not api_key:
+                st.error("请先在左侧边栏填写 API Key！")
+            else:
+                combined_site_info = site_text
+                # 如果上传了文件，临时解析文件内容合并进去
+                if site_file is not None:
+                    with st.spinner("正在提取上传的场地文件内容..."):
+                        temp_path = os.path.join("./data", "temp_site_" + site_file.name)
+                        os.makedirs("./data", exist_ok=True)
+                        with open(temp_path, "wb") as f: f.write(site_file.getbuffer())
+                        
+                        try:
+                            if temp_path.lower().endswith(".pdf"): loader = PyPDFLoader(temp_path)
+                            elif temp_path.lower().endswith((".docx", ".doc")): loader = Docx2txtLoader(temp_path)
+                            else: loader = TextLoader(temp_path, encoding="utf-8")
+                            
+                            file_docs = loader.load()
+                            extracted_text = "\n".join([d.page_content for d in file_docs])
+                            combined_site_info = f"【文件提取内容】\n{extracted_text}\n\n【用户附加描述】\n{site_text}"
+                            os.remove(temp_path) # 用完即删
+                        except Exception as e:
+                            st.error(f"场地文件读取失败: {str(e)}")
+
+                if not combined_site_info.strip():
+                    st.warning("请上传场地资料文件或输入场地描述！")
+                else:
+                    with st.spinner(f"系统正在深度剖析场地特征..."):
+                        try:
+                            site_json, cb = generate_site_analysis(api_key, base_url, model_name, combined_site_info)
+                            
+                            st.session_state.total_tokens += cb.total_tokens
+                            st.session_state.prompt_tokens += cb.prompt_tokens
+                            st.session_state.completion_tokens += cb.completion_tokens
+                            
+                            st.success("✅ 场地解析完成！")
+                            st.json(site_json)
+                            
+                            site_json_string = json.dumps(site_json, ensure_ascii=False, indent=2)
+                            st.download_button(
+                                label="💾 导出场地分析报告 (.json)",
+                                file_name="site_analysis_report.json",
+                                mime="application/json",
+                                data=site_json_string,
+                                type="secondary",
+                                use_container_width=True
+                            )
+                        except Exception as e:
+                            st.error(f"解析失败: {str(e)}")
+        else:
+            st.info("上传或输入资料后，点击按钮开始解析...")
