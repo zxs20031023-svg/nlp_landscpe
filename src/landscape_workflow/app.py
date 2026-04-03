@@ -219,6 +219,159 @@ def precheck_uploaded_file(uploaded_file) -> dict:
         temp_path.unlink(missing_ok=True)
 
 
+def resolve_spec_preview_path(filename: str, source_path: str = "") -> Path | None:
+    candidates: list[Path] = []
+    if source_path:
+        candidates.append(Path(source_path))
+    candidates.append(PATHS.knowledge_base_dir / filename)
+    candidates.append(PATHS.docs_dir / "research" / filename)
+
+    for path in candidates:
+        if path.exists() and path.is_file():
+            return path
+
+    for base_dir in [PATHS.resources_dir, PATHS.docs_dir]:
+        matches = list(base_dir.rglob(filename))
+        if matches:
+            return matches[0]
+    return None
+
+
+def build_spec_preview(file_path: Path) -> dict:
+    documents = load_documents(file_path)
+    preview_text = "\n\n".join(
+        doc.page_content.strip()
+        for doc in documents[:2]
+        if getattr(doc, "page_content", "").strip()
+    )[:1800]
+    return {
+        "文件名": file_path.name,
+        "文件类型": file_path.suffix.replace(".", "").upper() or "UNKNOWN",
+        "解析单元": len(documents),
+        "预览路径": str(file_path),
+        "预览内容": preview_text or "该规范已解析，但未提取到可展示的预览文本。",
+    }
+
+
+def build_spec_catalog(
+    kb_manager: KnowledgeBaseManager,
+    kb_stats: KnowledgeBaseStats,
+) -> list[dict]:
+    indexed_records = {item.filename: item for item in kb_stats.documents}
+    catalog: list[dict] = []
+    seen_names: set[str] = set()
+
+    for file_path in kb_manager.list_preferred_bundled_files():
+        record = indexed_records.get(file_path.name)
+        catalog.append(
+            {
+                "filename": file_path.name,
+                "source_type": "内置规范",
+                "ingest_status": "已入库" if record else "未入库",
+                "file_type": file_path.suffix.replace(".", "").upper() or "UNKNOWN",
+                "chunk_count": record.chunk_count if record else 0,
+                "ingested_at": record.ingested_at if record else "-",
+                "preview_path": str(file_path),
+                "source_path": str(file_path),
+                "file_hash": record.file_hash if record else "-",
+            }
+        )
+        seen_names.add(file_path.name)
+
+    for record in kb_stats.documents:
+        if record.filename in seen_names:
+            continue
+        preview_path = resolve_spec_preview_path(record.filename, record.source_path)
+        catalog.append(
+            {
+                "filename": record.filename,
+                "source_type": "外部规范",
+                "ingest_status": "已入库",
+                "file_type": Path(record.filename).suffix.replace(".", "").upper() or "UNKNOWN",
+                "chunk_count": record.chunk_count,
+                "ingested_at": record.ingested_at,
+                "preview_path": str(preview_path) if preview_path else "",
+                "source_path": record.source_path,
+                "file_hash": record.file_hash,
+            }
+        )
+
+    catalog.sort(key=lambda item: (item["source_type"] != "内置规范", item["filename"].lower()))
+    return catalog
+
+
+def render_spec_catalog(catalog: list[dict]) -> None:
+    if not catalog:
+        st.info("当前还没有可展示的规范资源。")
+        return
+
+    st.markdown("### 规范清单")
+    for item in catalog:
+        with st.container(border=True):
+            st.json(
+                {
+                    "规范名称": item["filename"],
+                    "规范来源": item["source_type"],
+                    "入库状态": item["ingest_status"],
+                    "文件类型": item["file_type"],
+                    "切分片段数": item["chunk_count"],
+                    "最近入库时间": item["ingested_at"],
+                    "预览路径": item["preview_path"] or "暂无可预览源文件",
+                },
+                expanded=False,
+            )
+
+
+def render_spec_preview_panel(catalog: list[dict]) -> None:
+    with st.container(border=True):
+        st.markdown("### 规范内容预览")
+        if not catalog:
+            st.info("当前没有可预览的规范。")
+            return
+
+        option_map = {
+            f"{item['filename']}｜{item['source_type']}｜{item['ingest_status']}": item
+            for item in catalog
+        }
+        selected_label = st.selectbox(
+            "选择要预览的规范",
+            options=list(option_map.keys()),
+            key="kb_preview_selector",
+        )
+        selected_item = option_map[selected_label]
+        preview_path = resolve_spec_preview_path(
+            selected_item["filename"],
+            selected_item.get("preview_path", "") or selected_item.get("source_path", ""),
+        )
+
+        st.json(
+            {
+                "规范名称": selected_item["filename"],
+                "规范来源": selected_item["source_type"],
+                "入库状态": selected_item["ingest_status"],
+                "文件类型": selected_item["file_type"],
+                "切分片段数": selected_item["chunk_count"],
+                "最近入库时间": selected_item["ingested_at"],
+            },
+            expanded=False,
+        )
+
+        if not preview_path:
+            st.warning("当前规范没有可直接访问的原始文件，因此无法展示内容预览。")
+            return
+
+        try:
+            preview_info = build_spec_preview(preview_path)
+            st.text_area(
+                "规范正文预览",
+                value=preview_info["预览内容"],
+                height=260,
+                disabled=True,
+            )
+        except Exception as exc:
+            st.error(f"规范预览失败：{exc}")
+
+
 def sync_recommendation_state(recommendations: list[dict], reset_to_default: bool = False) -> None:
     st.session_state.site_recommendations = recommendations
     current_ids = [item["project_id"] for item in recommendations]
@@ -502,6 +655,14 @@ def render_knowledge_base_tab(settings: WorkflowSettings, kb_stats: KnowledgeBas
         "支持导入内置规范资源，也支持上传 TXT / PDF / DOCX / DOC 文件。建议优先使用 DOCX 或 TXT，以获得更稳定的解析效果。",
     )
 
+    kb_manager = KnowledgeBaseManager(
+        api_key=settings.api_key,
+        base_url=settings.base_url,
+        embedding_model=settings.embedding_model,
+        persist_directory=PATHS.chroma_db,
+    )
+    spec_catalog = build_spec_catalog(kb_manager, kb_stats)
+
     left, right = st.columns([1.4, 1])
     with left:
         with st.container(border=True):
@@ -529,12 +690,6 @@ def render_knowledge_base_tab(settings: WorkflowSettings, kb_stats: KnowledgeBas
             if not settings.api_key:
                 st.error("请先填写 API Key。")
             else:
-                kb_manager = KnowledgeBaseManager(
-                    api_key=settings.api_key,
-                    base_url=settings.base_url,
-                    embedding_model=settings.embedding_model,
-                    persist_directory=PATHS.chroma_db,
-                )
                 with st.spinner("正在导入内置规范资源..."):
                     try:
                         results = kb_manager.ingest_bundled_resources()
@@ -550,12 +705,6 @@ def render_knowledge_base_tab(settings: WorkflowSettings, kb_stats: KnowledgeBas
             elif not settings.api_key:
                 st.error("请先填写 API Key。")
             else:
-                kb_manager = KnowledgeBaseManager(
-                    api_key=settings.api_key,
-                    base_url=settings.base_url,
-                    embedding_model=settings.embedding_model,
-                    persist_directory=PATHS.chroma_db,
-                )
                 stage = st.empty()
                 with st.spinner("正在构建知识库..."):
                     try:
@@ -589,19 +738,8 @@ def render_knowledge_base_tab(settings: WorkflowSettings, kb_stats: KnowledgeBas
                     st.text_area("内容预览", value=precheck["preview"], height=120, disabled=True)
 
     with right:
-        with st.container(border=True):
-            st.markdown("### 内置规范资源")
-            bundled_files = [
-                file_path.name
-                for file_path in KnowledgeBaseManager(
-                    api_key=settings.api_key,
-                    base_url=settings.base_url,
-                    embedding_model=settings.embedding_model,
-                    persist_directory=PATHS.chroma_db,
-                ).list_preferred_bundled_files()
-            ]
-            for name in bundled_files:
-                st.write(f"- {name}")
+        render_spec_catalog(spec_catalog)
+        render_spec_preview_panel(spec_catalog)
 
         with st.container(border=True):
             st.markdown("### 上传建议")
