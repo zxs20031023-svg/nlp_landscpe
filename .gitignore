@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+.env
+.env.*
+.streamlit/secrets.toml
+
+runtime/temp/
+runtime/chroma_db/
+runtime/output_briefs/history_*.json
+runtime/output_briefs/*.txt
+runtime/output_briefs/digital_briefs/
+
+test_temp.txt

@@ -1,0 +1,88 @@
+{
+  "projects": [
+    {
+      "project_id": "sz-pocket-park-renewal",
+      "name": "深圳高密社区口袋公园更新示范",
+      "city": "深圳",
+      "project_type": "社区口袋公园",
+      "scene": "高密度社区微更新",
+      "summary": "针对高密度老旧社区中的零散空地进行复合更新，强调适老活动、儿童友好、夜间安全和高效停留空间组织。",
+      "source_url": "",
+      "source_label": "本地案例库",
+      "library_source": "local",
+      "keywords": ["高密度社区", "口袋公园", "微更新", "适老", "儿童活动", "夜间安全"],
+      "target_users": ["老年人", "儿童", "社区居民"],
+      "highlights": ["复合功能环线", "林荫休憩节点", "儿童与老人分区组织"]
+    },
+    {
+      "project_id": "gz-waterfront-health-walk",
+      "name": "广州滨水康养慢行带示范",
+      "city": "广州",
+      "project_type": "滨水慢行景观",
+      "scene": "滨水康养与疗愈步道",
+      "summary": "以滨水步道和康养节点为核心，兼顾疗愈体验、适老慢行系统、雨洪调蓄和夜间照明安全。",
+      "source_url": "",
+      "source_label": "本地案例库",
+      "library_source": "local",
+      "keywords": ["滨水", "康养", "疗愈", "慢行", "适老", "夜间照明"],
+      "target_users": ["老年人", "康养人群", "日常散步居民"],
+      "highlights": ["滨水休憩平台", "连续无障碍步道", "低照度安全照明"]
+    },
+    {
+      "project_id": "cd-sponge-corner-park",
+      "name": "成都海绵型街角绿地更新样板",
+      "city": "成都",
+      "project_type": "街角绿地",
+      "scene": "小微空间海绵化改造",
+      "summary": "围绕积水、低洼和街角停留空间不足的问题，整合下凹绿地、雨水花园和社交停留设施。",
+      "source_url": "",
+      "source_label": "本地案例库",
+      "library_source": "local",
+      "keywords": ["街角绿地", "积水", "低洼", "海绵城市", "雨水花园", "微更新"],
+      "target_users": ["周边居民", "通勤人群"],
+      "highlights": ["雨水花园系统", "下凹式种植池", "短暂停留灰空间"]
+    },
+    {
+      "project_id": "hz-healing-garden",
+      "name": "杭州适老疗愈花园示范",
+      "city": "杭州",
+      "project_type": "疗愈花园",
+      "scene": "适老康复与静养空间",
+      "summary": "面向适老康养和静态休憩需求，强调无障碍路径、芳香植物、安静座椅和季相疗愈体验。",
+      "source_url": "",
+      "source_label": "本地案例库",
+      "library_source": "local",
+      "keywords": ["适老", "疗愈花园", "康复", "无障碍", "安静", "芳香植物"],
+      "target_users": ["老年人", "康复人群", "陪护家属"],
+      "highlights": ["环形无障碍步道", "静音休憩节点", "可感知季相植物"]
+    },
+    {
+      "project_id": "bj-village-green-renewal",
+      "name": "北京城中村共享绿地微更新",
+      "city": "北京",
+      "project_type": "共享绿地",
+      "scene": "高密住区公共空间补绿",
+      "summary": "在高密建成环境中，通过共享绿地、活动场地和边界整理提升社区停留性与公共交往质量。",
+      "source_url": "",
+      "source_label": "本地案例库",
+      "library_source": "local",
+      "keywords": ["高密", "共享绿地", "公共交往", "边界整理", "微更新"],
+      "target_users": ["社区居民", "儿童", "青年家庭"],
+      "highlights": ["边角空间再利用", "邻里活动场地", "弹性停留设施"]
+    },
+    {
+      "project_id": "xm-hillside-community-park",
+      "name": "厦门山地社区立体公园改造",
+      "city": "厦门",
+      "project_type": "山地社区公园",
+      "scene": "高差场地与立体慢行",
+      "summary": "应对复杂高差和山地场地特征，强调分层空间组织、坡道串联、观景平台和安全护栏。",
+      "source_url": "",
+      "source_label": "本地案例库",
+      "library_source": "local",
+      "keywords": ["高差", "山地", "坡道", "立体慢行", "观景平台", "安全护栏"],
+      "target_users": ["社区居民", "游客"],
+      "highlights": ["立体步道系统", "分层活动平台", "坡地边界安全设计"]
+    }
+  ]
+}

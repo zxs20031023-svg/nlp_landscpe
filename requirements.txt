@@ -1,0 +1,12 @@
+streamlit>=1.44
+langchain>=0.3
+langchain-openai>=0.3
+langchain-community>=0.3
+langchain-text-splitters>=0.3
+chromadb>=0.5
+pydantic>=2.7
+docx2txt>=0.8
+pypdf>=5.0
+pymupdf>=1.24
+rapidocr-onnxruntime>=1.2
+ddgs>=9.0

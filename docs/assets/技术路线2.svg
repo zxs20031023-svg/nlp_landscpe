@@ -1,0 +1,193 @@
+<svg width="1000" height="1500" viewBox="0 0 1000 1500" xmlns="http://www.w3.org/2000/svg">
+    <style>
+        /* 阶段文字：极粗黑体 */
+        .stage-text { font-family: 'SimHei', 'Microsoft YaHei', sans-serif; font-size: 20px; font-weight: 900; fill: #000; }
+        /* 章节文字：深灰色粗体 */
+        .chapter-text { font-family: 'SimHei', 'Microsoft YaHei', sans-serif; font-size: 16px; font-weight: bold; fill: #666; text-anchor: end; }
+        /* 方框内主文字：粗体 */
+        .box-text { font-family: 'SimHei', 'Microsoft YaHei', sans-serif; font-size: 15px; font-weight: bold; text-anchor: middle; dominant-baseline: middle; fill: #000; }
+        /* 列表文字：中粗 */
+        .sub-text { font-family: 'SimHei', 'Microsoft YaHei', sans-serif; font-size: 13px; font-weight: bold; text-anchor: middle; dominant-baseline: middle; fill: #222; }
+        
+        /* 边框样式 */
+        .main-box { fill: #e8e8e8; stroke: #000; stroke-width: 2.2; rx: 10; }
+        .item-box { fill: #ffffff; stroke: #000; stroke-width: 2; }
+        .section-border { stroke: #444; stroke-dasharray: 6,4; fill: none; stroke-width: 1.5; }
+        
+        /* 连接线样式 */
+        .connect-line { stroke: #000; stroke-width: 1.8; fill: none; }
+        .divider-line { stroke: #000; stroke-width: 1.5; stroke-dasharray: 2,2; fill: none; }
+        .arrow-path { stroke: #000; stroke-width: 2.5; fill: #000; }
+    </style>
+
+    <defs>
+        <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#000" />
+        </marker>
+    </defs>
+
+    <!-- 背景 -->
+    <rect width="1000" height="1500" fill="#fff" />
+
+    <!-- 第一阶段：提出问题 -->
+    <g transform="translate(40, 30)">
+        <rect width="920" height="170" class="section-border" />
+        <text x="25" y="60" class="stage-text">提</text>
+        <text x="25" y="90" class="stage-text">出</text>
+        <text x="25" y="120" class="stage-text">问</text>
+        <text x="25" y="150" class="stage-text">题</text>
+
+        <path d="M460,65 L460,90 M150,90 L770,90 M150,90 L150,110 M356,90 L356,110 M563,90 L563,110 M770,90 L770,110" class="connect-line" />
+        
+        <rect x="375" y="25" width="170" height="40" class="main-box" />
+        <text x="460" y="47" class="box-text">绪 论</text>
+
+        <rect x="70" y="110" width="160" height="45" class="item-box" />
+        <text x="150" y="134" class="box-text">研究背景与意义</text>
+        <rect x="276" y="110" width="160" height="45" class="item-box" />
+        <text x="356" y="134" class="box-text">国内外研究现状</text>
+        <rect x="483" y="110" width="160" height="45" class="item-box" />
+        <text x="563" y="134" class="box-text">语义鸿沟问题陈述</text>
+        <rect x="690" y="110" width="160" height="45" class="item-box" />
+        <text x="770" y="134" class="box-text">研究方法与框架</text>
+    </g>
+
+    <line x1="500" y1="200" x2="500" y2="240" class="arrow-path" marker-end="url(#arrowhead)" />
+
+    <!-- 第二阶段：研究基础 -->
+    <g transform="translate(40, 250)">
+        <rect width="920" height="170" class="section-border" />
+        <text x="25" y="60" class="stage-text">研</text>
+        <text x="25" y="90" class="stage-text">究</text>
+        <text x="25" y="120" class="stage-text">基</text>
+        <text x="25" y="150" class="stage-text">础</text>
+
+
+        <path d="M460,65 L460,90 M180,90 L740,90 M180,90 L180,110 M460,90 L460,110 M740,90 L740,110" class="connect-line" />
+
+        <rect x="350" y="25" width="220" height="40" class="main-box" />
+        <text x="460" y="47" class="box-text">相关理论基础与概念研究</text>
+
+        <rect x="90" y="110" width="180" height="45" class="item-box" />
+        <text x="180" y="134" class="box-text">NLP与大语言模型基础</text>
+        <rect x="370" y="110" width="180" height="45" class="item-box" />
+        <text x="460" y="134" class="box-text">LIM与景观本体理论基础</text>
+        <rect x="650" y="110" width="180" height="45" class="item-box" />
+        <text x="740" y="134" class="box-text">计算性与参数化设计研究</text>
+    </g>
+
+    <line x1="500" y1="420" x2="500" y2="460" class="arrow-path" marker-end="url(#arrowhead)" />
+
+    <!-- 第三阶段：分析问题 (高度已修正) -->
+    <g transform="translate(40, 470)">
+        <rect width="920" height="620" class="section-border" />
+        <text x="25" y="280" class="stage-text">分</text>
+        <text x="25" y="310" class="stage-text">析</text>
+        <text x="25" y="340" class="stage-text">问</text>
+        <text x="25" y="370" class="stage-text">题</text>
+     
+
+        <!-- 第三章内容 -->
+        <path d="M460,65 L460,90 M170,90 L750,90 M170,90 L170,110 M460,90 L460,110 M750,90 L750,110" class="connect-line" />
+        <rect x="360" y="25" width="200" height="40" class="main-box" />
+        <text x="460" y="47" class="box-text">数据处理与模型集成构建</text>
+
+        <g transform="translate(60, 110)">
+            <rect x="0" y="0" width="230" height="150" class="section-border" />
+            <text x="115" y="25" class="box-text">语料数据采集</text>
+            <line x1="25" y1="40" x2="205" y2="40" class="divider-line"/>
+            <text x="115" y="65" class="sub-text">《公园设计规范》文本</text>
+            <text x="115" y="95" class="sub-text">空间氛围感知词汇库</text>
+            <text x="115" y="125" class="sub-text">专业设计说明语料集</text>
+
+            <rect x="285" y="0" width="230" height="150" class="section-border" />
+            <text x="400" y="25" class="box-text">数据预处理技术</text>
+            <line x1="310" y1="40" x2="490" y2="40" class="divider-line"/>
+            <text x="400" y="65" class="sub-text">基于Python的文本清洗</text>
+            <text x="400" y="95" class="sub-text">景观要素命名实体识别</text>
+            <text x="400" y="125" class="sub-text">知识图谱语义映射构建</text>
+
+            <rect x="570" y="0" width="230" height="150" class="section-border" />
+            <text x="685" y="25" class="box-text">大模型架构开发</text>
+            <line x1="595" y1="40" x2="775" y2="40" class="divider-line"/>
+            <text x="685" y="65" class="sub-text">基于LLM的解析引擎集成</text>
+            <text x="685" y="95" class="sub-text">RAG检索增强知识挂载</text>
+            <text x="685" y="125" class="sub-text">提示词迭代与参数调优</text>
+        </g>
+
+        <!-- 第四章内容 -->
+        <line x1="460" y1="280" x2="460" y2="315" class="connect-line" marker-end="url(#arrowhead)" />
+        <rect x="310" y="315" width="300" height="40" class="main-box" />
+        <text x="460" y="337" class="box-text">景观需求语义解析与转译系统设计</text>
+
+        <path d="M460,355 L460,375 M180,375 L740,375 M180,375 L180,390 M460,375 L460,390 M740,375 L740,390" class="connect-line" />
+        <rect x="80" y="390" width="200" height="45" class="item-box" />
+        <text x="180" y="414" class="box-text">感性意图语义自动映射</text>
+        <rect x="360" y="390" width="200" height="45" class="item-box" />
+        <text x="460" y="414" class="box-text">规范合规自动化核验逻辑</text>
+        <rect x="640" y="390" width="200" height="45" class="item-box" />
+        <text x="740" y="414" class="box-text">数字化任务书导出模块</text>
+
+        <line x1="460" y1="435" x2="460" y2="470" class="connect-line" marker-end="url(#arrowhead)" />
+        <rect x="310" y="470" width="300" height="45" class="item-box" />
+        <text x="460" y="494" class="box-text">语义驱动-逻辑校验参数生成机制</text>
+        
+        <line x1="460" y1="515" x2="460" y2="550" class="connect-line" marker-end="url(#arrowhead)" />
+        <rect x="310" y="550" width="300" height="45" class="item-box" />
+        <text x="460" y="573" class="box-text">数字化任务书原型(DigitalBrief)</text>
+    </g>
+
+    <!-- 跨阶段连接箭头 -->
+    <line x1="500" y1="1090" x2="500" y2="1140" class="arrow-path" marker-end="url(#arrowhead)" />
+
+    <!-- 第四阶段：解决问题 -->
+    <g transform="translate(40, 1150)">
+        <rect width="920" height="280" class="section-border" />
+        <text x="25" y="110" class="stage-text">实</text>
+        <text x="25" y="140" class="stage-text">际</text>
+        <text x="25" y="170" class="stage-text">应</text>
+        <text x="25" y="200" class="stage-text">用</text>
+        
+
+        <path d="M460,65 L460,90 M150,90 L770,90 M150,90 L150,110 M356,90 L356,110 M563,90 L563,110 M770,90 L770,110" class="connect-line" />
+        
+        <rect x="300" y="25" width="320" height="40" class="main-box" />
+        <text x="460" y="47" class="box-text">城市公园设计需求数字化转译实证研究</text>
+
+        <g transform="translate(60, 110)">
+            <rect x="0" y="0" width="180" height="45" class="item-box" />
+            <text x="90" y="24" class="box-text">感性风格需求</text>
+            <rect x="0" y="55" width="180" height="110" class="section-border" />
+            <text x="90" y="80" class="sub-text">植被郁闭度参数</text>
+            <text x="90" y="110" class="sub-text">空间开敞度映射</text>
+            <text x="90" y="140" class="sub-text">景观风格数值表征</text>
+
+            <rect x="206" y="0" width="180" height="45" class="item-box" />
+            <text x="296" y="24" class="box-text">行为功能转化</text>
+            <rect x="206" y="55" width="180" height="110" class="section-border" />
+            <text x="296" y="80" class="sub-text">园路坡度阈值控制</text>
+            <text x="296" y="110" class="sub-text">服务设施分布密度</text>
+            <text x="296" y="140" class="sub-text">功能空间面积占比</text>
+
+            <rect x="413" y="0" width="180" height="45" class="item-box" />
+            <text x="503" y="24" class="box-text">国家标准对标</text>
+            <rect x="413" y="55" width="180" height="110" class="section-border" />
+            <text x="503" y="80" class="sub-text">强制性条文核验</text>
+            <text x="503" y="110" class="sub-text">设计冲突自动预警</text>
+            <text x="503" y="140" class="sub-text">参数化合规修正</text>
+
+            <rect x="620" y="0" width="180" height="45" class="item-box" />
+            <text x="710" y="24" class="box-text">转译效能评估</text>
+            <rect x="620" y="55" width="180" height="110" class="section-border" />
+            <text x="710" y="80" class="sub-text">转译准确率评价</text>
+            <text x="710" y="110" class="sub-text">召回率对比分析</text>
+            <text x="710" y="140" class="sub-text">专家办公辅助反馈</text>
+        </g>
+    </g>
+
+    <!-- 结论 -->
+    <line x1="500" y1="1430" x2="500" y2="1460" class="arrow-path" marker-end="url(#arrowhead)" />
+    <rect x="380" y="1460" width="240" height="40" class="main-box" />
+    <text x="500" y="1482" class="box-text">结 论 与 展 望</text>
+
+</svg>
